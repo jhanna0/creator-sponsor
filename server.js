@@ -2,9 +2,50 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const dns = require('dns').promises;
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
+const crypto = require('crypto');
+
+// UUID replacement function
+function uuidv4() {
+    return crypto.randomUUID();
+}
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key-change-in-production';
+
+// Email configuration - for development, use ethereal for testing
+let transporter;
+
+async function createTransporter() {
+    if (process.env.NODE_ENV === 'production') {
+        // Production: Use SES or real email service
+        transporter = nodemailer.createTransport({
+            service: 'gmail', // Change to SES when deploying
+            auth: {
+                user: process.env.EMAIL_USER,
+                pass: process.env.EMAIL_PASS
+            }
+        });
+    } else {
+        // Development: Use ethereal for testing
+        const testAccount = await nodemailer.createTestAccount();
+        transporter = nodemailer.createTransport({
+            host: 'smtp.ethereal.email',
+            port: 587,
+            secure: false,
+            auth: {
+                user: testAccount.user,
+                pass: testAccount.pass
+            }
+        });
+    }
+}
+
+// Initialize transporter
+createTransporter().catch(console.error);
 
 app.use(cors());
 app.use(express.json());
@@ -17,17 +58,167 @@ const sampleData = require('./data.js');
 // In-memory storage (for demo purposes)
 let users = [...sampleData];
 let nextId = users.length + 1;
+let registeredUsers = []; // For auth users
+let verificationTokens = new Map(); // email -> token
+let posts = [...sampleData]; // Rename users to posts for clarity
+
+// Authentication middleware
+function authenticateToken(req, res, next) {
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+
+    if (!token) {
+        return res.status(401).json({ error: 'Access token required' });
+    }
+
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+        if (err) return res.status(403).json({ error: 'Invalid token' });
+        req.user = user;
+        next();
+    });
+}
 
 // Serve main page
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// API Routes
-app.post('/api/register', (req, res) => {
+// Auth Routes
+app.post('/api/auth/signup', async (req, res) => {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+        return res.status(400).json({ error: 'Email and password required' });
+    }
+
+    // Check if email already exists
+    if (registeredUsers.find(u => u.email === email)) {
+        return res.status(400).json({ error: 'Email already registered' });
+    }
+
+    try {
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Generate verification token
+        const verificationToken = uuidv4();
+        verificationTokens.set(email, verificationToken);
+
+        // Send verification email
+        const verificationUrl = `http://localhost:${PORT}/api/auth/verify/${verificationToken}`;
+
+        const info = await transporter.sendMail({
+            from: process.env.EMAIL_USER || 'noreply@yourapp.com',
+            to: email,
+            subject: 'Verify your email',
+            html: `
+                <h2>Welcome to Creator-Sponsor Platform!</h2>
+                <p>Please click the link below to verify your email:</p>
+                <a href="${verificationUrl}">Verify Email</a>
+                <p>Or copy this link: ${verificationUrl}</p>
+            `
+        });
+
+        // Log ethereal URL for development
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('Verification email sent!');
+            console.log('Preview URL: ' + nodemailer.getTestMessageUrl(info));
+        }
+
+        // Store user (unverified)
+        const user = {
+            id: uuidv4(),
+            email,
+            password: hashedPassword,
+            verified: false,
+            createdAt: new Date()
+        };
+
+        registeredUsers.push(user);
+
+        res.json({
+            success: true,
+            message: 'Registration successful! Please check your email to verify your account.'
+        });
+
+    } catch (error) {
+        console.error('Signup error:', error);
+        res.status(500).json({ error: 'Registration failed' });
+    }
+});
+
+app.get('/api/auth/verify/:token', (req, res) => {
+    const { token } = req.params;
+
+    // Find user by verification token
+    const email = [...verificationTokens.entries()].find(([, t]) => t === token)?.[0];
+
+    if (!email) {
+        return res.status(400).json({ error: 'Invalid verification token' });
+    }
+
+    const user = registeredUsers.find(u => u.email === email);
+    if (!user) {
+        return res.status(400).json({ error: 'User not found' });
+    }
+
+    // Mark as verified
+    user.verified = true;
+    verificationTokens.delete(email);
+
+    res.json({ success: true, message: 'Email verified successfully!' });
+});
+
+app.post('/api/auth/login', async (req, res) => {
+    const { email, password } = req.body;
+
+    const user = registeredUsers.find(u => u.email === email);
+    if (!user) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    if (!user.verified) {
+        return res.status(401).json({ error: 'Please verify your email first' });
+    }
+
+    const validPassword = await bcrypt.compare(password, user.password);
+    if (!validPassword) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign(
+        { userId: user.id, email: user.email },
+        JWT_SECRET,
+        { expiresIn: '24h' }
+    );
+
+    res.json({
+        success: true,
+        token,
+        user: { id: user.id, email: user.email, verified: user.verified }
+    });
+});
+
+// Protected post creation - requires auth
+app.post('/api/posts', authenticateToken, (req, res) => {
     const { userType, platform, followers, interests, pricePoint, description, contactInfo } = req.body;
 
-    const user = {
+    // Enforce contact email must match verified registration email
+    if (contactInfo !== req.user.email) {
+        return res.status(400).json({
+            error: 'Contact email must match your verified registration email'
+        });
+    }
+
+    // Check if user already has an active post (one per email limitation)
+    const existingPost = posts.find(p => p.contactInfo === req.user.email);
+    if (existingPost) {
+        return res.status(400).json({
+            error: 'You already have an active post. Please delete it first to create a new one.'
+        });
+    }
+
+    const post = {
         id: nextId++,
         userType,
         platform,
@@ -35,34 +226,48 @@ app.post('/api/register', (req, res) => {
         interests: interests.split(',').map(i => i.trim()),
         pricePoint: parseFloat(pricePoint),
         description,
-        contactInfo,
+        contactInfo: req.user.email, // Always use verified email
+        userId: req.user.userId,
+        verified: true, // All auth users are verified
         createdAt: new Date()
     };
 
-    users.push(user);
-    res.json({ success: true, user });
+    posts.push(post);
+    res.json({ success: true, post });
 });
 
-app.get('/api/users', (req, res) => {
+// Delete user's post
+app.delete('/api/posts/my-post', authenticateToken, (req, res) => {
+    const postIndex = posts.findIndex(p => p.contactInfo === req.user.email);
+
+    if (postIndex === -1) {
+        return res.status(404).json({ error: 'No post found' });
+    }
+
+    posts.splice(postIndex, 1);
+    res.json({ success: true, message: 'Post deleted successfully' });
+});
+
+app.get('/api/posts', (req, res) => {
     const { userType, platform, minFollowers, maxFollowers, interests, minPrice, maxPrice } = req.query;
 
-    let filtered = users.filter(user => {
-        if (userType && user.userType !== userType) return false;
-        if (platform && user.platform.toLowerCase() !== platform.toLowerCase()) return false;
-        if (minFollowers && user.followers < parseInt(minFollowers)) return false;
-        if (maxFollowers && user.followers > parseInt(maxFollowers)) return false;
-        if (minPrice && user.pricePoint < parseFloat(minPrice)) return false;
-        if (maxPrice && user.pricePoint > parseFloat(maxPrice)) return false;
+    let filtered = posts.filter(post => {
+        if (userType && post.userType !== userType) return false;
+        if (platform && post.platform.toLowerCase() !== platform.toLowerCase()) return false;
+        if (minFollowers && post.followers < parseInt(minFollowers)) return false;
+        if (maxFollowers && post.followers > parseInt(maxFollowers)) return false;
+        if (minPrice && post.pricePoint < parseFloat(minPrice)) return false;
+        if (maxPrice && post.pricePoint > parseFloat(maxPrice)) return false;
         if (interests) {
             const searchTerms = interests.toLowerCase().split(' ');
-            const userText = [
-                user.name,
-                user.description,
-                ...user.interests
+            const postText = [
+                post.name,
+                post.description,
+                ...post.interests
             ].join(' ').toLowerCase();
 
             const hasAllTerms = searchTerms.every(term =>
-                term.trim() && userText.includes(term.trim())
+                term.trim() && postText.includes(term.trim())
             );
             if (!hasAllTerms) return false;
         }
@@ -191,30 +396,30 @@ function calculateMatchScore(user1, user2) {
     return Math.round(score);
 }
 
-// Get recommendations endpoint
-app.get('/api/recommendations/:userId', (req, res) => {
-    const userId = parseInt(req.params.userId);
-    const user = users.find(u => u.id === userId);
+// Get recommendations endpoint - requires auth
+app.get('/api/recommendations', authenticateToken, (req, res) => {
+    // Find user's post to get their preferences
+    const userPost = posts.find(p => p.contactInfo === req.user.email);
 
-    if (!user) {
-        return res.status(404).json({ error: 'User not found' });
+    if (!userPost) {
+        return res.status(400).json({ error: 'You need to create a post first' });
     }
 
     // Get opposite user type
-    const targetUserType = user.userType === 'creator' ? 'sponsor' : 'creator';
+    const targetUserType = userPost.userType === 'creator' ? 'sponsor' : 'creator';
 
-    // Calculate match scores with all opposite type users
-    const matches = users
-        .filter(u => u.id !== userId && u.userType === targetUserType)
-        .map(targetUser => ({
-            ...targetUser,
-            matchScore: calculateMatchScore(user, targetUser)
+    // Calculate match scores with all opposite type posts
+    const matches = posts
+        .filter(p => p.id !== userPost.id && p.userType === targetUserType)
+        .map(targetPost => ({
+            ...targetPost,
+            matchScore: calculateMatchScore(userPost, targetPost)
         }))
         .sort((a, b) => b.matchScore - a.matchScore)
         .slice(0, 6); // Top 6 matches
 
     res.json({
-        user: user,
+        userPost: userPost,
         matches: matches,
         totalMatches: matches.length
     });

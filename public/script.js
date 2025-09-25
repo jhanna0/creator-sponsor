@@ -115,14 +115,14 @@ async function loadUsers() {
             if (max && max !== '+') params.append('maxPrice', max.replace('+', ''));
         }
 
-        const url = `/api/users${params.toString() ? '?' + params.toString() : ''}`;
+        const url = `/api/posts${params.toString() ? '?' + params.toString() : ''}`;
         const response = await fetch(url);
-        const users = await response.json();
-        currentUsers = users;
-        return users;
+        const posts = await response.json();
+        currentUsers = posts;
+        return posts;
     } catch (error) {
-        console.error('Failed to load users:', error);
-        showMessage('error', 'Failed to load users');
+        console.error('Failed to load posts:', error);
+        showMessage('error', 'Failed to load posts');
         return [];
     }
 }
@@ -306,13 +306,130 @@ async function applyFilters() {
     }
 }
 
-// Registration modal
+// Auth state
+let currentUser = null;
+let authToken = localStorage.getItem('authToken');
+
+// Check auth status on load
+document.addEventListener('DOMContentLoaded', function() {
+    checkAuthStatus();
+});
+
+async function checkAuthStatus() {
+    if (authToken) {
+        // TODO: Validate token with server
+        // For now, just assume valid if exists
+        currentUser = JSON.parse(localStorage.getItem('userData') || '{}');
+        updateUIForAuth();
+    }
+}
+
+function updateUIForAuth() {
+    const authButtons = document.querySelector('.auth-buttons');
+    const userMenu = document.querySelector('.user-menu');
+
+    if (currentUser && authToken) {
+        authButtons?.classList.add('hidden');
+        if (userMenu) {
+            userMenu.classList.remove('hidden');
+            document.getElementById('userEmail').textContent = currentUser.email;
+        }
+    } else {
+        authButtons?.classList.remove('hidden');
+        userMenu?.classList.add('hidden');
+    }
+}
+
+// Registration modal - now shows auth form
 function showRegistration(userType) {
     const modal = document.getElementById('registrationModal');
     const modalTitle = document.getElementById('modalTitle');
     const formFields = document.getElementById('formFields');
 
-    modalTitle.textContent = `Join as ${userType === 'creator' ? 'Creator' : 'Sponsor'}`;
+    // Handle auth-only buttons (login/signup from header)
+    if (userType === 'login' || userType === 'signup') {
+        modalTitle.textContent = 'Sign Up / Login';
+        formFields.innerHTML = `
+            <div class="auth-tabs">
+                <button type="button" class="auth-tab ${userType === 'signup' ? 'active' : ''}" onclick="showAuthTab('signup')">Sign Up</button>
+                <button type="button" class="auth-tab ${userType === 'login' ? 'active' : ''}" onclick="showAuthTab('login')">Login</button>
+            </div>
+            <div id="signupForm" class="auth-form ${userType === 'login' ? 'hidden' : ''}">
+                <div class="form-group">
+                    <label for="signupEmail">Email</label>
+                    <input type="email" id="signupEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="signupPassword">Password</label>
+                    <input type="password" id="signupPassword" required>
+                </div>
+            </div>
+            <div id="loginForm" class="auth-form ${userType === 'signup' ? 'hidden' : ''}">
+                <div class="form-group">
+                    <label for="loginEmail">Email</label>
+                    <input type="email" id="loginEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" required>
+                </div>
+            </div>
+        `;
+        modal.dataset.step = 'auth';
+        modal.dataset.userType = 'creator'; // Default for post creation later
+    } else if (!currentUser) {
+        // Show signup/login form first for post creation
+        modalTitle.textContent = 'Sign Up / Login';
+        formFields.innerHTML = `
+            <div class="auth-tabs">
+                <button type="button" class="auth-tab active" onclick="showAuthTab('signup')">Sign Up</button>
+                <button type="button" class="auth-tab" onclick="showAuthTab('login')">Login</button>
+            </div>
+            <div id="signupForm" class="auth-form">
+                <div class="form-group">
+                    <label for="signupEmail">Email</label>
+                    <input type="email" id="signupEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="signupPassword">Password</label>
+                    <input type="password" id="signupPassword" required>
+                </div>
+            </div>
+            <div id="loginForm" class="auth-form hidden">
+                <div class="form-group">
+                    <label for="loginEmail">Email</label>
+                    <input type="email" id="loginEmail" required>
+                </div>
+                <div class="form-group">
+                    <label for="loginPassword">Password</label>
+                    <input type="password" id="loginPassword" required>
+                </div>
+            </div>
+        `;
+        modal.dataset.step = 'auth';
+        modal.dataset.userType = userType;
+    } else {
+        // User is logged in, show post creation form
+        showPostForm(userType);
+    }
+
+    modal.classList.remove('hidden');
+}
+
+function showAuthTab(tab) {
+    document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.auth-form').forEach(f => f.classList.add('hidden'));
+
+    document.querySelector(`[onclick="showAuthTab('${tab}')"]`).classList.add('active');
+    document.getElementById(`${tab}Form`).classList.remove('hidden');
+}
+
+function showPostForm(userType) {
+    const modal = document.getElementById('registrationModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const formFields = document.getElementById('formFields');
+
+    modalTitle.textContent = `Create ${userType === 'creator' ? 'Creator' : 'Sponsor'} Post`;
 
     // Generate form fields
     const fields = getFormFields(userType);
@@ -320,9 +437,7 @@ function showRegistration(userType) {
 
     // Store user type for form submission
     modal.dataset.userType = userType;
-
-    // Show modal
-    modal.classList.remove('hidden');
+    modal.dataset.step = 'post';
 }
 
 function closeModal() {
@@ -377,8 +492,9 @@ function getFormFields(userType) {
         </div>
 
         <div class="form-group">
-            <label for="regContact">Contact Information</label>
-            <input type="text" id="regContact" name="contactInfo" required placeholder="Email or preferred contact method">
+            <label for="regContact">Contact Email (must match your account email)</label>
+            <input type="email" id="regContact" name="contactInfo" required readonly value="${currentUser?.email || ''}" placeholder="Your verified email will be used">
+            <small>This will be automatically set to your verified email address</small>
         </div>
     `;
 }
@@ -390,63 +506,123 @@ function setupModalForm() {
         e.preventDefault();
 
         const modal = document.getElementById('registrationModal');
-        const userType = modal.dataset.userType;
+        const step = modal.dataset.step;
 
-        // Get form data
-        const formData = new FormData(form);
-        const data = {
-            userType: userType,
-            name: formData.get('name'),
-            platform: formData.get('platform'),
-            followers: parseInt(formData.get('followers')),
-            interests: formData.get('interests').split(',').map(i => i.trim()),
-            pricePoint: parseFloat(formData.get('pricePoint')),
-            description: formData.get('description'),
-            contactInfo: formData.get('contactInfo'),
-            avatar: getRandomAvatar(userType),
-            verified: false
-        };
-
-        try {
-            const response = await fetch('/api/register', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(data)
-            });
-
-            if (response.ok) {
-                const result = await response.json();
-                showMessage('success', 'Registration successful! Welcome to CreatorBridge.');
-                closeModal();
-
-                // Reload users and refresh current view
-                await loadUsers();
-                const activeSection = document.querySelector('.section:not(.hidden)');
-                if (activeSection && (activeSection.id === 'creators' || activeSection.id === 'sponsors')) {
-                    const sectionType = activeSection.id === 'creators' ? 'creator' : 'sponsor';
-                    displayUsers(sectionType);
-                }
-
-                // Go to appropriate section
-                setTimeout(() => {
-                    showSection(userType === 'creator' ? 'creators' : 'sponsors');
-
-                    // Update nav
-                    const navButtons = document.querySelectorAll('.nav-btn');
-                    navButtons.forEach(btn => btn.classList.remove('active'));
-                    const targetNav = document.querySelector(`[data-section="${userType}s"]`);
-                    if (targetNav) targetNav.classList.add('active');
-                }, 1000);
-
-            } else {
-                throw new Error('Registration failed');
-            }
-        } catch (error) {
-            showMessage('error', 'Registration failed. Please try again.');
+        if (step === 'auth') {
+            await handleAuth();
+        } else if (step === 'post') {
+            await handlePostCreation();
         }
     });
+}
+
+async function handleAuth() {
+    const modal = document.getElementById('registrationModal');
+    const isSignup = !document.getElementById('signupForm').classList.contains('hidden');
+
+    let email, password;
+    if (isSignup) {
+        email = document.getElementById('signupEmail').value;
+        password = document.getElementById('signupPassword').value;
+    } else {
+        email = document.getElementById('loginEmail').value;
+        password = document.getElementById('loginPassword').value;
+    }
+
+    try {
+        const endpoint = isSignup ? '/api/auth/signup' : '/api/auth/login';
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            if (isSignup) {
+                showMessage('success', result.message);
+                showAuthTab('login');
+            } else {
+                // Login successful
+                authToken = result.token;
+                currentUser = result.user;
+                localStorage.setItem('authToken', authToken);
+                localStorage.setItem('userData', JSON.stringify(currentUser));
+
+                updateUIForAuth();
+                showMessage('success', 'Login successful!');
+
+                // Now show post creation form
+                const userType = modal.dataset.userType;
+                showPostForm(userType);
+            }
+        } else {
+            showMessage('error', result.error || 'Authentication failed');
+        }
+    } catch (error) {
+        showMessage('error', 'Network error. Please try again.');
+    }
+}
+
+async function handlePostCreation() {
+    const modal = document.getElementById('registrationModal');
+    const userType = modal.dataset.userType;
+
+    // Get form data
+    const formData = new FormData(document.getElementById('registrationForm'));
+    const data = {
+        userType: userType,
+        name: formData.get('name'),
+        platform: formData.get('platform'),
+        followers: parseInt(formData.get('followers')),
+        interests: formData.get('interests'),
+        pricePoint: parseFloat(formData.get('pricePoint')),
+        description: formData.get('description'),
+        contactInfo: currentUser.email // Always use verified email
+    };
+
+    try {
+        const response = await fetch('/api/posts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${authToken}`
+            },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showMessage('success', 'Post created successfully!');
+            closeModal();
+
+            // Reload posts and refresh current view
+            await loadUsers();
+            const activeSection = document.querySelector('.section:not(.hidden)');
+            if (activeSection && (activeSection.id === 'creators' || activeSection.id === 'sponsors')) {
+                const sectionType = activeSection.id === 'creators' ? 'creator' : 'sponsor';
+                displayUsers(sectionType);
+            }
+
+            // Go to appropriate section
+            setTimeout(() => {
+                showSection(userType === 'creator' ? 'creators' : 'sponsors');
+
+                // Update nav
+                const navButtons = document.querySelectorAll('.nav-btn');
+                navButtons.forEach(btn => btn.classList.remove('active'));
+                const targetNav = document.querySelector(`[data-section="${userType}s"]`);
+                if (targetNav) targetNav.classList.add('active');
+            }, 1000);
+
+        } else {
+            showMessage('error', result.error || 'Failed to create post');
+        }
+    } catch (error) {
+        showMessage('error', 'Network error. Please try again.');
+    }
 }
 
 // Get random avatar for new users
@@ -456,6 +632,17 @@ function getRandomAvatar(userType) {
 
     const avatars = userType === 'creator' ? creatorAvatars : sponsorAvatars;
     return avatars[Math.floor(Math.random() * avatars.length)];
+}
+
+// Logout function
+function logout() {
+    authToken = null;
+    currentUser = null;
+    localStorage.removeItem('authToken');
+    localStorage.removeItem('userData');
+    updateUIForAuth();
+    showMessage('success', 'Logged out successfully');
+    showSection('home');
 }
 
 // Message system
@@ -509,9 +696,13 @@ function debounce(func, wait) {
 }
 
 // Recommendations functionality
-async function loadRecommendations(userId) {
+async function loadRecommendations() {
+    if (!authToken) return null;
+
     try {
-        const response = await fetch(`/api/recommendations/${userId}`);
+        const response = await fetch('/api/recommendations', {
+            headers: { 'Authorization': `Bearer ${authToken}` }
+        });
         const data = await response.json();
         return data;
     } catch (error) {
