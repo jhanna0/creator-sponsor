@@ -6,6 +6,19 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const nodemailer = require('nodemailer');
 const crypto = require('crypto');
+require('dotenv').config();
+
+// Import Stripe payment handlers
+const {
+    createPostingCheckoutSession,
+    createContactRevealCheckoutSession,
+    handlePaymentSuccess,
+    hasUserPaidForPosting,
+    hasUserPaidForContact,
+    getUserPaymentStatus,
+    handleStripeWebhook,
+    getOrCreateStripeCustomer
+} = require('./stripe_handler');
 
 // UUID replacement function
 function uuidv4() {
@@ -199,7 +212,7 @@ app.post('/api/auth/login', async (req, res) => {
     });
 });
 
-// Protected post creation - requires auth
+// Protected post creation - requires auth AND payment
 app.post('/api/posts', authenticateToken, (req, res) => {
     const { userType, platform, followers, interests, pricePoint, description, contactInfo } = req.body;
 
@@ -207,6 +220,15 @@ app.post('/api/posts', authenticateToken, (req, res) => {
     if (contactInfo !== req.user.email) {
         return res.status(400).json({
             error: 'Contact email must match your verified registration email'
+        });
+    }
+
+    // Check if user has paid the posting fee
+    if (!hasUserPaidForPosting(req.user.email)) {
+        return res.status(402).json({
+            error: 'Payment required to create a post. Please pay the $5 posting fee first.',
+            requiresPayment: true,
+            paymentType: 'posting_fee'
         });
     }
 
@@ -251,6 +273,20 @@ app.delete('/api/posts/my-post', authenticateToken, (req, res) => {
 app.get('/api/posts', (req, res) => {
     const { userType, platform, minFollowers, maxFollowers, interests, minPrice, maxPrice } = req.query;
 
+    // Get requester email from auth header if available
+    const authHeader = req.headers['authorization'];
+    const token = authHeader && authHeader.split(' ')[1];
+    let requesterEmail = null;
+
+    if (token) {
+        try {
+            const decoded = jwt.verify(token, JWT_SECRET);
+            requesterEmail = decoded.email;
+        } catch (err) {
+            // Invalid token, but still show public posts
+        }
+    }
+
     let filtered = posts.filter(post => {
         if (userType && post.userType !== userType) return false;
         if (platform && post.platform.toLowerCase() !== platform.toLowerCase()) return false;
@@ -275,7 +311,87 @@ app.get('/api/posts', (req, res) => {
         return true;
     });
 
+    // Hide contact information unless user has paid or it's their own post
+    filtered = filtered.map(post => {
+        const isOwnPost = requesterEmail && post.contactInfo === requesterEmail;
+        const hasPaidForContact = requesterEmail && hasUserPaidForContact(requesterEmail, post.id.toString());
+
+        if (isOwnPost || hasPaidForContact) {
+            return post; // Show full contact info
+        } else {
+            // Hide contact info and add payment requirement flag
+            return {
+                ...post,
+                contactInfo: '••••••••@••••••••.com', // Hidden
+                contactHidden: true,
+                revealCost: parseFloat(process.env.CONTACT_REVEAL_FEE) / 100 || 1 // $1.00 per reveal
+            };
+        }
+    });
+
     res.json(filtered);
+});
+
+// Payment endpoints
+app.post('/api/payment/create-posting-session', authenticateToken, createPostingCheckoutSession);
+
+app.post('/api/payment/create-contact-reveal-session', authenticateToken, createContactRevealCheckoutSession);
+
+// Removed bulk contact session - now using individual payments with Stripe saved payment methods
+
+app.get('/api/payment/success', handlePaymentSuccess);
+
+// Get contact info if user has paid for reveal
+app.post('/api/reveal-contact', authenticateToken, (req, res) => {
+    const { targetUserId } = req.body;
+
+    if (!targetUserId) {
+        return res.status(400).json({ error: 'Target user ID is required' });
+    }
+
+    // Check if already revealed (paid)
+    if (hasUserPaidForContact(req.user.email, targetUserId)) {
+        const targetPost = posts.find(p => p.id === parseInt(targetUserId));
+        if (targetPost) {
+            return res.json({
+                success: true,
+                message: 'Contact information revealed',
+                contactInfo: targetPost.contactInfo,
+                alreadyRevealed: true
+            });
+        } else {
+            return res.status(404).json({ error: 'Post not found' });
+        }
+    } else {
+        // User hasn't paid yet - they need to pay through Stripe checkout
+        return res.status(402).json({
+            error: 'Payment required to reveal contact information.',
+            requiresPayment: true,
+            message: 'Please use the payment button to reveal this contact for $1.00'
+        });
+    }
+});
+
+// Get user's payment status
+app.get('/api/payment/status', authenticateToken, (req, res) => {
+    const status = getUserPaymentStatus(req.user.email);
+    res.json({
+        success: true,
+        ...status
+    });
+});
+
+// Stripe webhook endpoint (for production)
+app.post('/api/payment/webhook', express.raw({type: 'application/json'}), handleStripeWebhook);
+
+// Serve payment success page
+app.get('/payment-success', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'payment-success.html'));
+});
+
+// Serve payment cancelled page
+app.get('/payment-cancelled', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'payment-cancelled.html'));
 });
 
 // Domain verification endpoints

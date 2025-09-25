@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Cancelled - Creator-Sponsor Platform</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .cancelled-container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 3rem;
+            text-align: center;
+            max-width: 500px;
+            width: 90%;
+            margin: 2rem;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .cancelled-icon {
+            width: 80px;
+            height: 80px;
+            margin: 0 auto 2rem;
+            background: #ff9800;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.5rem;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 1rem;
+            font-weight: 700;
+        }
+
+        p {
+            font-size: 1.1rem;
+            margin-bottom: 2rem;
+            opacity: 0.9;
+            line-height: 1.6;
+        }
+
+        .return-btn {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            padding: 1rem 2rem;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+            margin: 0.5rem;
+        }
+
+        .return-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+            border-color: rgba(255, 255, 255, 0.5);
+            transform: translateY(-2px);
+        }
+
+        .retry-btn {
+            background: #ff9800;
+            border-color: #f57c00;
+        }
+
+        .retry-btn:hover {
+            background: #f57c00;
+            border-color: #ef6c00;
+        }
+
+        .info-box {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 1.5rem;
+            margin: 2rem 0;
+            text-align: left;
+        }
+
+        .info-box h3 {
+            margin-top: 0;
+            color: #ff9800;
+        }
+
+        @media (max-width: 600px) {
+            .cancelled-container {
+                padding: 2rem;
+                margin: 1rem;
+            }
+
+            h1 {
+                font-size: 2rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="cancelled-container">
+        <div class="cancelled-icon">⚠</div>
+        <h1>Payment Cancelled</h1>
+        <p>Your payment has been cancelled. No charges were made to your account.</p>
+
+        <div id="payment-info" class="info-box">
+            <h3>What happened?</h3>
+            <p>You cancelled the payment process before it was completed. This is completely normal and your account was not charged.</p>
+
+            <h3>What's next?</h3>
+            <div id="next-steps">
+                <p>You can try the payment again at any time. If you experienced any issues, please contact our support team.</p>
+            </div>
+        </div>
+
+        <a href="javascript:history.back()" class="return-btn retry-btn">Try Payment Again</a>
+        <a href="/" class="return-btn">Return to Platform</a>
+    </div>
+
+    <script>
+        // Parse URL parameters to show specific cancellation message
+        const urlParams = new URLSearchParams(window.location.search);
+        const paymentType = urlParams.get('type');
+        const nextStepsDiv = document.getElementById('next-steps');
+
+        if (paymentType === 'posting') {
+            nextStepsDiv.innerHTML = `
+                <p><strong>To create a post:</strong> You'll need to complete the $5.00 posting fee payment.</p>
+                <p>This fee helps us maintain a high-quality platform and reduce spam.</p>
+            `;
+        } else if (paymentType === 'contact') {
+            nextStepsDiv.innerHTML = `
+                <p><strong>To reveal contact information:</strong> You'll need to complete the $1.00 contact reveal payment.</p>
+                <p>This small fee ensures serious inquiries and protects users from spam.</p>
+            `;
+        }
+    </script>
+</body>
+</html>
