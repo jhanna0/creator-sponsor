@@ -140,6 +140,21 @@
                 <h1>Content Creators</h1>
                 <p>Discover talented creators for your next campaign</p>
             </div>
+
+            <!-- Recommended Matches -->
+            <div id="recommendedSection" class="recommended-section hidden">
+                <div class="recommendations-header">
+                    <h2><i class="fas fa-star"></i> Recommended for You</h2>
+                    <p>Based on your profile and interests</p>
+                </div>
+                <div id="recommendedGrid" class="grid recommended-grid"></div>
+                <div class="show-all-section">
+                    <button class="btn btn-outline" onclick="showAllUsers()">
+                        <i class="fas fa-list"></i> Show All Creators
+                    </button>
+                </div>
+            </div>
+
             <div id="creatorsGrid" class="grid"></div>
         </section>
 
@@ -149,6 +164,21 @@
                 <h1>Brand Sponsors</h1>
                 <p>Find brands looking for authentic partnerships</p>
             </div>
+
+            <!-- Recommended Matches -->
+            <div id="recommendedSponsorsSection" class="recommended-section hidden">
+                <div class="recommendations-header">
+                    <h2><i class="fas fa-star"></i> Recommended for You</h2>
+                    <p>Based on your profile and interests</p>
+                </div>
+                <div id="recommendedSponsorsGrid" class="grid recommended-grid"></div>
+                <div class="show-all-section">
+                    <button class="btn btn-outline" onclick="showAllUsers()">
+                        <i class="fas fa-list"></i> Show All Sponsors
+                    </button>
+                </div>
+            </div>
+
             <div id="sponsorsGrid" class="grid"></div>
         </section>
 
@@ -191,6 +221,134 @@
                         <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
                     </div>
                 </form>
+            </div>
+        </div>
+
+        <!-- Contact Modal -->
+        <div id="contactModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Contact <span id="contactUserName"></span></h2>
+                    <button class="close-btn" onclick="closeContactModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="captcha-form">
+                    <div class="warning-box">
+                        <i class="fas fa-shield-alt"></i>
+                        <h4>Security Verification</h4>
+                        <p>Please verify you're not a bot and read our safety warning:</p>
+                        <ul class="warning-list">
+                            <li>Always verify the contact information through the creator's official channels</li>
+                            <li>Never send money upfront without verification</li>
+                            <li>Report suspicious profiles to help keep our community safe</li>
+                        </ul>
+                    </div>
+                    <div class="captcha-section">
+                        <label id="captchaQuestion">What is 2 + 2?</label>
+                        <input type="number" id="captchaInput" placeholder="Enter answer" required>
+                        <div id="contactError" class="error-text hidden">
+                            <i class="fas fa-exclamation-triangle"></i>
+                            Incorrect answer. Please try again.
+                        </div>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-primary" onclick="verifyCaptchaAndShowContact()">
+                            Verify & Show Contact
+                        </button>
+                        <button type="button" class="btn btn-outline" onclick="closeContactModal()">Cancel</button>
+                    </div>
+                </div>
+                <div id="contactReveal" class="contact-reveal hidden"></div>
+            </div>
+        </div>
+
+        <!-- Domain Verification Modal -->
+        <div id="verificationModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Verify Domain Ownership</h2>
+                    <button class="close-btn" onclick="closeVerificationModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-form">
+                    <div id="domainForm">
+                        <div class="verification-info">
+                            <i class="fas fa-shield-alt"></i>
+                            <h4>Get Verified</h4>
+                            <p>Choose how to verify your identity and build trust with sponsors.</p>
+                        </div>
+
+                        <div class="verification-options">
+                            <div class="verification-option" onclick="selectVerificationMethod('social')">
+                                <i class="fas fa-users"></i>
+                                <h5>Social Media Verification</h5>
+                                <p>Post a verification code on your main social platform</p>
+                                <span class="verification-badge">Recommended</span>
+                            </div>
+
+                            <div class="verification-option" onclick="selectVerificationMethod('domain')">
+                                <i class="fas fa-globe"></i>
+                                <h5>Domain Verification</h5>
+                                <p>Verify ownership of your website/domain</p>
+                                <small>Only if you have your own website</small>
+                            </div>
+                        </div>
+
+                        <div id="socialVerification" class="verification-method hidden">
+                            <div class="form-group">
+                                <label for="socialUrl">Your Profile URL</label>
+                                <input type="url" id="socialUrl" placeholder="https://youtube.com/@yourname" required>
+                                <small>Enter your main social media profile URL</small>
+                            </div>
+                        </div>
+
+                        <div id="domainVerification" class="verification-method hidden">
+                            <div class="form-group">
+                                <label for="domainInput">Your Domain (without http://)</label>
+                                <input type="text" id="domainInput" placeholder="example.com" required>
+                                <small>Enter the domain you want to verify</small>
+                            </div>
+                        </div>
+                        <div class="modal-actions">
+                            <button type="button" class="btn btn-primary" onclick="startDomainVerification()">
+                                <i class="fas fa-play"></i> Start Verification
+                            </button>
+                            <button type="button" class="btn btn-outline" onclick="closeVerificationModal()">Cancel</button>
+                        </div>
+                    </div>
+                    <div id="verificationInstructions" class="verification-instructions hidden"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Report Modal -->
+        <div id="reportModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2>Report <span id="reportUserName"></span></h2>
+                    <button class="close-btn" onclick="closeReportModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div class="modal-form">
+                    <div class="form-group">
+                        <label for="reportReason">Reason for reporting:</label>
+                        <select id="reportReason" required>
+                            <option value="">Select a reason</option>
+                            <option value="fake_profile">Fake or impersonated profile</option>
+                            <option value="suspicious_contact">Suspicious contact information</option>
+                            <option value="inappropriate_content">Inappropriate content or behavior</option>
+                            <option value="spam">Spam or misleading information</option>
+                            <option value="other">Other</option>
+                        </select>
+                    </div>
+                    <div class="modal-actions">
+                        <button type="button" class="btn btn-danger" onclick="submitReport()">Submit Report</button>
+                        <button type="button" class="btn btn-outline" onclick="closeReportModal()">Cancel</button>
+                    </div>
+                </div>
             </div>
         </div>
 

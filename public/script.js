@@ -61,8 +61,18 @@ function showSection(sectionId) {
     // Load data for specific sections
     if (sectionId === 'creators') {
         displayUsers('creator');
+        // Show recommendations for first sponsor (demo)
+        const firstSponsor = currentUsers.find(u => u.userType === 'sponsor');
+        if (firstSponsor) {
+            showRecommendationsForUser(firstSponsor.id, 'sponsor');
+        }
     } else if (sectionId === 'sponsors') {
         displayUsers('sponsor');
+        // Show recommendations for first creator (demo)
+        const firstCreator = currentUsers.find(u => u.userType === 'creator');
+        if (firstCreator) {
+            showRecommendationsForUser(firstCreator.id, 'creator');
+        }
     }
 
     // Hide messages
@@ -73,21 +83,40 @@ function showSection(sectionId) {
 function setupPlatformFilters() {
     const platformBtns = document.querySelectorAll('.platform-btn');
     platformBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
+        btn.addEventListener('click', async () => {
             // Update active platform button
             platformBtns.forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
 
-            // Update filter
+            // Update filter and reload data
             currentFilters.platform = btn.dataset.platform === 'all' ? '' : btn.dataset.platform;
+
+            // Apply filters with API call
+            await applyFilters();
         });
     });
 }
 
-// Load users from API
+// Load users from API with current filters
 async function loadUsers() {
     try {
-        const response = await fetch('/api/users');
+        // Build query parameters from current filters
+        const params = new URLSearchParams();
+
+        if (currentFilters.platform) {
+            params.append('platform', currentFilters.platform);
+        }
+        if (currentFilters.search) {
+            params.append('interests', currentFilters.search);
+        }
+        if (currentFilters.priceRange) {
+            const [min, max] = currentFilters.priceRange.split('-');
+            if (min) params.append('minPrice', min);
+            if (max && max !== '+') params.append('maxPrice', max.replace('+', ''));
+        }
+
+        const url = `/api/users${params.toString() ? '?' + params.toString() : ''}`;
+        const response = await fetch(url);
         const users = await response.json();
         currentUsers = users;
         return users;
@@ -105,28 +134,9 @@ function displayUsers(userType = '') {
 
     if (!grid) return;
 
-    // Filter users
+    // Filter by userType only (API handles other filters)
     let filteredUsers = currentUsers.filter(user => {
         if (userType && user.userType !== userType) return false;
-        if (currentFilters.platform && user.platform.toLowerCase() !== currentFilters.platform) return false;
-        if (currentFilters.search) {
-            const search = currentFilters.search.toLowerCase();
-            const searchFields = [
-                user.name,
-                user.description,
-                user.interests.join(' ')
-            ].join(' ').toLowerCase();
-            if (!searchFields.includes(search)) return false;
-        }
-        if (currentFilters.priceRange) {
-            const price = user.pricePoint;
-            const [min, max] = currentFilters.priceRange.split('-').map(p => parseInt(p.replace('+', '')));
-            if (max) {
-                if (price < min || price > max) return false;
-            } else {
-                if (price < min) return false;
-            }
-        }
         return true;
     });
 
@@ -185,8 +195,18 @@ function createUserCard(user) {
             </div>
 
             <div class="card-contact">
-                <i class="fas fa-envelope"></i>
-                ${user.contactInfo}
+                <button class="contact-btn" onclick="showContactModal(${user.id})">
+                    <i class="fas fa-envelope"></i>
+                    Contact ${user.userType === 'creator' ? 'Creator' : 'Sponsor'}
+                </button>
+                ${!user.verified && user.userType === 'creator' ? `
+                    <button class="verify-btn" onclick="showVerificationModal(${user.id})" title="Verify your domain">
+                        <i class="fas fa-shield-alt"></i>
+                    </button>
+                ` : ''}
+                <button class="report-btn" onclick="showReportModal(${user.id})" title="Report this profile">
+                    <i class="fas fa-flag"></i>
+                </button>
             </div>
         </div>
     `;
@@ -202,13 +222,16 @@ function formatNumber(num) {
     return num.toString();
 }
 
-// Apply filters
-function applyFilters() {
+// Apply filters with API call
+async function applyFilters() {
     // Get filter values
-    currentFilters.search = document.getElementById('searchInput').value;
+    currentFilters.search = document.getElementById('searchInput').value.trim();
     currentFilters.priceRange = document.getElementById('priceRange').value;
 
-    // Re-display current section
+    // Load filtered users from API
+    await loadUsers();
+
+    // Re-display current section with fresh data
     const activeSection = document.querySelector('.section:not(.hidden)');
     if (activeSection) {
         if (activeSection.id === 'creators') {
@@ -419,4 +442,293 @@ function debounce(func, wait) {
         clearTimeout(timeout);
         timeout = setTimeout(later, wait);
     };
+}
+
+// Recommendations functionality
+async function loadRecommendations(userId) {
+    try {
+        const response = await fetch(`/api/recommendations/${userId}`);
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Failed to load recommendations:', error);
+        return null;
+    }
+}
+
+function displayRecommendations(recommendations, userType) {
+    const sectionId = userType === 'creator' ? 'recommendedSection' : 'recommendedSponsorsSection';
+    const gridId = userType === 'creator' ? 'recommendedGrid' : 'recommendedSponsorsGrid';
+
+    const section = document.getElementById(sectionId);
+    const grid = document.getElementById(gridId);
+
+    if (!recommendations || !recommendations.matches || recommendations.matches.length === 0) {
+        section.classList.add('hidden');
+        return;
+    }
+
+    // Create cards with match scores
+    const cardsHTML = recommendations.matches.map(match => {
+        const card = createUserCard(match);
+        // Add match score badge
+        const matchBadge = `<div class="match-score">${match.matchScore}% Match</div>`;
+        return card.replace('<div class="type-badge', matchBadge + '<div class="type-badge');
+    }).join('');
+
+    grid.innerHTML = cardsHTML;
+    section.classList.remove('hidden');
+}
+
+// Show recommendations for current user (demo - in real app you'd have user authentication)
+async function showRecommendationsForUser(userId, userType) {
+    const recommendations = await loadRecommendations(userId);
+    if (recommendations) {
+        displayRecommendations(recommendations, userType === 'creator' ? 'sponsor' : 'creator');
+    }
+}
+
+// Function to show all users (hide recommendations)
+function showAllUsers() {
+    document.getElementById('recommendedSection').classList.add('hidden');
+    document.getElementById('recommendedSponsorsSection').classList.add('hidden');
+}
+
+// Contact modal functionality
+function showContactModal(userId) {
+    const user = currentUsers.find(u => u.id === userId);
+    if (!user) return;
+
+    const modal = document.getElementById('contactModal');
+    const userName = document.getElementById('contactUserName');
+    const captchaQuestion = document.getElementById('captchaQuestion');
+    const captchaInput = document.getElementById('captchaInput');
+
+    userName.textContent = user.name;
+
+    // Generate simple math captcha
+    const num1 = Math.floor(Math.random() * 10) + 1;
+    const num2 = Math.floor(Math.random() * 10) + 1;
+    const answer = num1 + num2;
+
+    captchaQuestion.textContent = `What is ${num1} + ${num2}?`;
+    captchaInput.dataset.answer = answer;
+    captchaInput.value = '';
+
+    // Store user data for reveal
+    modal.dataset.userId = userId;
+    modal.dataset.contactInfo = user.contactInfo;
+
+    modal.classList.remove('hidden');
+}
+
+function closeContactModal() {
+    const modal = document.getElementById('contactModal');
+    modal.classList.add('hidden');
+    document.getElementById('captchaInput').value = '';
+    document.getElementById('contactError').classList.add('hidden');
+}
+
+function verifyCaptchaAndShowContact() {
+    const modal = document.getElementById('contactModal');
+    const captchaInput = document.getElementById('captchaInput');
+    const correctAnswer = parseInt(captchaInput.dataset.answer);
+    const userAnswer = parseInt(captchaInput.value);
+    const contactError = document.getElementById('contactError');
+
+    if (userAnswer !== correctAnswer) {
+        contactError.classList.remove('hidden');
+        captchaInput.value = '';
+        return;
+    }
+
+    // Show contact info
+    const contactInfo = modal.dataset.contactInfo;
+    const contactReveal = document.getElementById('contactReveal');
+    contactReveal.innerHTML = `
+        <div class="contact-success">
+            <i class="fas fa-check-circle"></i>
+            <h4>Contact Information</h4>
+            <p class="contact-info">${contactInfo}</p>
+            <p class="contact-note">
+                <i class="fas fa-info-circle"></i>
+                Please verify this creator/sponsor owns the contact information before proceeding.
+            </p>
+        </div>
+    `;
+    contactReveal.classList.remove('hidden');
+
+    // Hide form
+    document.querySelector('.captcha-form').classList.add('hidden');
+}
+
+// Report functionality
+async function reportUser(userId, reason = '') {
+    const user = currentUsers.find(u => u.id === userId);
+    if (!user) return;
+
+    try {
+        const response = await fetch('/api/report', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, reason })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showMessage('success', 'Thank you for your report. We will investigate this profile.');
+        } else {
+            showMessage('error', 'Failed to submit report. Please try again.');
+        }
+    } catch (error) {
+        console.error('Report error:', error);
+        showMessage('error', 'Network error. Please try again.');
+    }
+}
+
+function showReportModal(userId) {
+    const modal = document.getElementById('reportModal');
+    const user = currentUsers.find(u => u.id === userId);
+
+    if (!user) return;
+
+    document.getElementById('reportUserName').textContent = user.name;
+    modal.dataset.userId = userId;
+    modal.classList.remove('hidden');
+}
+
+function closeReportModal() {
+    const modal = document.getElementById('reportModal');
+    modal.classList.add('hidden');
+    document.getElementById('reportReason').value = '';
+}
+
+function submitReport() {
+    const modal = document.getElementById('reportModal');
+    const userId = parseInt(modal.dataset.userId);
+    const reason = document.getElementById('reportReason').value.trim();
+
+    if (!reason) {
+        showMessage('error', 'Please provide a reason for reporting.');
+        return;
+    }
+
+    reportUser(userId, reason);
+    closeReportModal();
+}
+
+// Verification functions
+function showVerificationModal(userId) {
+    const modal = document.getElementById('verificationModal');
+    modal.dataset.userId = userId;
+    modal.classList.remove('hidden');
+    // Reset state
+    document.querySelectorAll('.verification-method').forEach(m => m.classList.add('hidden'));
+    document.querySelectorAll('.verification-option').forEach(o => o.classList.remove('selected'));
+}
+
+function selectVerificationMethod(method) {
+    // Hide all methods
+    document.querySelectorAll('.verification-method').forEach(m => m.classList.add('hidden'));
+    document.querySelectorAll('.verification-option').forEach(o => o.classList.remove('selected'));
+
+    // Show selected method
+    if (method === 'social') {
+        document.getElementById('socialVerification').classList.remove('hidden');
+        document.querySelector('.verification-option').classList.add('selected');
+    } else if (method === 'domain') {
+        document.getElementById('domainVerification').classList.remove('hidden');
+        document.querySelectorAll('.verification-option')[1].classList.add('selected');
+    }
+}
+
+function closeVerificationModal() {
+    const modal = document.getElementById('verificationModal');
+    modal.classList.add('hidden');
+    document.getElementById('domainInput').value = '';
+    document.getElementById('verificationInstructions').classList.add('hidden');
+    document.getElementById('domainForm').classList.remove('hidden');
+}
+
+async function startDomainVerification() {
+    const modal = document.getElementById('verificationModal');
+    const userId = parseInt(modal.dataset.userId);
+    const domain = document.getElementById('domainInput').value.trim();
+
+    if (!domain) {
+        showMessage('error', 'Please enter a domain name');
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/verify/domain/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId, domain })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Show instructions
+            document.getElementById('domainForm').classList.add('hidden');
+            const instructions = document.getElementById('verificationInstructions');
+            instructions.innerHTML = `
+                <div class="verification-steps">
+                    <h4><i class="fas fa-list-ol"></i> Verification Steps</h4>
+                    <ol>
+                        <li>Go to your DNS provider (where you manage ${domain})</li>
+                        <li>Add a new TXT record with these details:</li>
+                    </ol>
+                    <div class="dns-record">
+                        <strong>Type:</strong> TXT<br>
+                        <strong>Name:</strong> @ (or leave blank)<br>
+                        <strong>Value:</strong> <code>${result.verificationCode}</code>
+                    </div>
+                    <p><i class="fas fa-info-circle"></i> DNS changes may take up to 10 minutes to propagate.</p>
+                    <button class="btn btn-primary" onclick="checkDomainVerification()">
+                        <i class="fas fa-check"></i> Check Verification
+                    </button>
+                    <button class="btn btn-outline" onclick="closeVerificationModal()">Cancel</button>
+                </div>
+            `;
+            instructions.classList.remove('hidden');
+        } else {
+            showMessage('error', result.error || 'Failed to start verification');
+        }
+    } catch (error) {
+        showMessage('error', 'Network error. Please try again.');
+    }
+}
+
+async function checkDomainVerification() {
+    const modal = document.getElementById('verificationModal');
+    const userId = parseInt(modal.dataset.userId);
+
+    try {
+        const response = await fetch('/api/verify/domain/check', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ userId })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showMessage('success', 'Domain verified successfully! Your profile is now verified.');
+            closeVerificationModal();
+            // Reload users to show updated verification status
+            await loadUsers();
+            const activeSection = document.querySelector('.section:not(.hidden)');
+            if (activeSection && (activeSection.id === 'creators' || activeSection.id === 'sponsors')) {
+                const sectionType = activeSection.id === 'creators' ? 'creator' : 'sponsor';
+                displayUsers(sectionType);
+            }
+        } else {
+            showMessage('error', result.message || 'Verification failed');
+        }
+    } catch (error) {
+        showMessage('error', 'Network error. Please try again.');
+    }
 }
