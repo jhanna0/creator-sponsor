@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CreatorBridge - Connect Creators with Sponsors</title>
+    <link rel="stylesheet" href="styles.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <h1>CreatorBridge</h1>
+                <span>Connect • Create • Collaborate</span>
+            </div>
+            <nav class="nav">
+                <button class="nav-btn active" onclick="showSection('home')" data-section="home">
+                    <i class="fas fa-home"></i>
+                    Home
+                </button>
+                <button class="nav-btn" onclick="showSection('creators')" data-section="creators">
+                    <i class="fas fa-star"></i>
+                    Creators
+                </button>
+                <button class="nav-btn" onclick="showSection('sponsors')" data-section="sponsors">
+                    <i class="fas fa-building"></i>
+                    Sponsors
+                </button>
+                <button class="nav-btn" onclick="showSection('join')" data-section="join">
+                    <i class="fas fa-plus"></i>
+                    Join
+                </button>
+            </nav>
+        </div>
+    </header>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="sidebar-content">
+            <div class="filter-section">
+                <h3><i class="fas fa-filter"></i> Filters</h3>
+
+                <div class="filter-group">
+                    <label>Platform</label>
+                    <div class="platform-filters">
+                        <button class="platform-btn active" data-platform="all">
+                            <i class="fas fa-globe"></i>
+                            All
+                        </button>
+                        <button class="platform-btn" data-platform="youtube">
+                            <i class="fab fa-youtube"></i>
+                            YouTube
+                        </button>
+                        <button class="platform-btn" data-platform="instagram">
+                            <i class="fab fa-instagram"></i>
+                            Instagram
+                        </button>
+                        <button class="platform-btn" data-platform="tiktok">
+                            <i class="fab fa-tiktok"></i>
+                            TikTok
+                        </button>
+                        <button class="platform-btn" data-platform="twitch">
+                            <i class="fab fa-twitch"></i>
+                            Twitch
+                        </button>
+                        <button class="platform-btn" data-platform="twitter">
+                            <i class="fab fa-twitter"></i>
+                            Twitter
+                        </button>
+                        <button class="platform-btn" data-platform="linkedin">
+                            <i class="fab fa-linkedin"></i>
+                            LinkedIn
+                        </button>
+                    </div>
+                </div>
+
+                <div class="filter-group">
+                    <label for="searchInput">Search</label>
+                    <input type="text" id="searchInput" placeholder="Search by keywords..." class="search-input">
+                </div>
+
+                <div class="filter-group">
+                    <label for="priceRange">Budget Range</label>
+                    <select id="priceRange" class="filter-select">
+                        <option value="">Any Budget</option>
+                        <option value="0-500">$0 - $500</option>
+                        <option value="500-1000">$500 - $1000</option>
+                        <option value="1000+">$1000+</option>
+                    </select>
+                </div>
+
+                <button class="apply-filters-btn" onclick="applyFilters()">
+                    <i class="fas fa-search"></i>
+                    Apply Filters
+                </button>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main">
+        <!-- Home Section -->
+        <section id="home" class="section">
+            <div class="hero">
+                <h1>Where Creators Meet Sponsors</h1>
+                <p>Join thousands of content creators and brands building authentic partnerships</p>
+                <div class="hero-buttons">
+                    <button class="btn btn-primary" onclick="showSection('creators')">
+                        <i class="fas fa-star"></i>
+                        Find Creators
+                    </button>
+                    <button class="btn btn-secondary" onclick="showSection('sponsors')">
+                        <i class="fas fa-building"></i>
+                        Find Sponsors
+                    </button>
+                </div>
+            </div>
+
+            <div class="stats">
+                <div class="stat">
+                    <h3>500+</h3>
+                    <p>Active Creators</p>
+                </div>
+                <div class="stat">
+                    <h3>200+</h3>
+                    <p>Brands</p>
+                </div>
+                <div class="stat">
+                    <h3>1M+</h3>
+                    <p>Connections Made</p>
+                </div>
+            </div>
+        </section>
+
+        <!-- Creators Section -->
+        <section id="creators" class="section hidden">
+            <div class="section-header">
+                <h1>Content Creators</h1>
+                <p>Discover talented creators for your next campaign</p>
+            </div>
+            <div id="creatorsGrid" class="grid"></div>
+        </section>
+
+        <!-- Sponsors Section -->
+        <section id="sponsors" class="section hidden">
+            <div class="section-header">
+                <h1>Brand Sponsors</h1>
+                <p>Find brands looking for authentic partnerships</p>
+            </div>
+            <div id="sponsorsGrid" class="grid"></div>
+        </section>
+
+        <!-- Join Section -->
+        <section id="join" class="section hidden">
+            <div class="join-options">
+                <div class="join-card" onclick="showRegistration('creator')">
+                    <div class="join-icon">
+                        <i class="fas fa-star"></i>
+                    </div>
+                    <h3>I'm a Creator</h3>
+                    <p>Share your content and connect with brands that align with your audience</p>
+                    <button class="btn btn-primary">Join as Creator</button>
+                </div>
+
+                <div class="join-card" onclick="showRegistration('sponsor')">
+                    <div class="join-icon">
+                        <i class="fas fa-building"></i>
+                    </div>
+                    <h3>I'm a Sponsor</h3>
+                    <p>Find authentic creators to promote your products and services</p>
+                    <button class="btn btn-secondary">Join as Sponsor</button>
+                </div>
+            </div>
+        </section>
+
+        <!-- Registration Modal -->
+        <div id="registrationModal" class="modal hidden">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h2 id="modalTitle">Join CreatorBridge</h2>
+                    <button class="close-btn" onclick="closeModal()">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <form id="registrationForm" class="modal-form">
+                    <div id="formFields"></div>
+                    <div class="modal-actions">
+                        <button type="submit" class="btn btn-primary">Register</button>
+                        <button type="button" class="btn btn-outline" onclick="closeModal()">Cancel</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Success/Error Messages -->
+        <div id="successMessage" class="message success hidden">
+            <i class="fas fa-check-circle"></i>
+            Registration successful! Welcome to CreatorBridge.
+        </div>
+        <div id="errorMessage" class="message error hidden">
+            <i class="fas fa-exclamation-circle"></i>
+            <span id="errorText">Something went wrong. Please try again.</span>
+        </div>
+    </main>
+
+    <script src="script.js"></script>
+</body>
+</html>
