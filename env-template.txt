@@ -1,0 +1,35 @@
+# Creator-Sponsor Platform Environment Configuration Template
+# Copy this to .env and update with your actual values
+
+# Database Configuration (PostgreSQL on Lightsail)
+USER=postgres
+HOST=localhost
+DB=creator_sponsor_platform
+PASSWORD=your_secure_password_here
+PORT=5432
+
+# Authentication
+JWT_SECRET=your-super-secret-jwt-key-min-256-bits-change-in-production
+
+# Stripe Payment Processing
+STRIPE_SECRET_KEY=sk_test_your_stripe_secret_key_here
+STRIPE_PUBLISHABLE_KEY=pk_test_your_stripe_publishable_key_here
+STRIPE_WEBHOOK_SECRET=whsec_your_webhook_secret_here
+
+# Email Configuration
+EMAIL_USER=your-email@domain.com
+EMAIL_PASS=your-app-password
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+
+# Application
+NODE_ENV=production
+PORT=3000
+BASE_URL=https://yourdomain.com
+
+# Database Management (for testing)
+CLEAR_DB_ON_STARTUP=true
+
+# Pricing (in cents)
+POST_FEE=500
+CONTACT_REVEAL_FEE=100

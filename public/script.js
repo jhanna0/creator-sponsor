@@ -18,7 +18,7 @@ const platformIcons = {
 };
 
 // Initialize app
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     // Set up navigation
     setupNavigation();
 
@@ -207,11 +207,6 @@ function createUserCard(user) {
                     <i class="fas fa-envelope"></i>
                     Contact ${user.userType === 'creator' ? 'Creator' : 'Sponsor'}
                 </button>
-                ${!user.verified && user.userType === 'creator' ? `
-                    <button class="verify-btn" onclick="event.stopPropagation(); showVerificationModal(${user.id})" title="Verify your domain">
-                        <i class="fas fa-shield-alt"></i>
-                    </button>
-                ` : ''}
                 <button class="report-btn" onclick="event.stopPropagation(); showReportModal(${user.id})" title="Report this profile">
                     <i class="fas fa-flag"></i>
                 </button>
@@ -311,7 +306,7 @@ let currentUser = null;
 let authToken = localStorage.getItem('authToken');
 
 // Check auth status on load
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     checkAuthStatus();
 });
 
@@ -357,21 +352,21 @@ function showRegistration(userType) {
             <div id="signupForm" class="auth-form ${userType === 'login' ? 'hidden' : ''}">
                 <div class="form-group">
                     <label for="signupEmail">Email</label>
-                    <input type="email" id="signupEmail" required>
+                    <input type="email" id="signupEmail">
                 </div>
                 <div class="form-group">
                     <label for="signupPassword">Password</label>
-                    <input type="password" id="signupPassword" required>
+                    <input type="password" id="signupPassword">
                 </div>
             </div>
             <div id="loginForm" class="auth-form ${userType === 'signup' ? 'hidden' : ''}">
                 <div class="form-group">
                     <label for="loginEmail">Email</label>
-                    <input type="email" id="loginEmail" required>
+                    <input type="email" id="loginEmail">
                 </div>
                 <div class="form-group">
                     <label for="loginPassword">Password</label>
-                    <input type="password" id="loginPassword" required>
+                    <input type="password" id="loginPassword">
                 </div>
             </div>
         `;
@@ -388,21 +383,21 @@ function showRegistration(userType) {
             <div id="signupForm" class="auth-form">
                 <div class="form-group">
                     <label for="signupEmail">Email</label>
-                    <input type="email" id="signupEmail" required>
+                    <input type="email" id="signupEmail">
                 </div>
                 <div class="form-group">
                     <label for="signupPassword">Password</label>
-                    <input type="password" id="signupPassword" required>
+                    <input type="password" id="signupPassword">
                 </div>
             </div>
             <div id="loginForm" class="auth-form hidden">
                 <div class="form-group">
                     <label for="loginEmail">Email</label>
-                    <input type="email" id="loginEmail" required>
+                    <input type="email" id="loginEmail">
                 </div>
                 <div class="form-group">
                     <label for="loginPassword">Password</label>
-                    <input type="password" id="loginPassword" required>
+                    <input type="password" id="loginPassword">
                 </div>
             </div>
         `;
@@ -502,31 +497,71 @@ function getFormFields(userType) {
 // Setup modal form submission
 function setupModalForm() {
     const form = document.getElementById('registrationForm');
+    console.log('Setting up modal form:', form);
+
+    if (!form) {
+        console.error('Registration form not found!');
+        return;
+    }
+
     form.addEventListener('submit', async (e) => {
+        console.log('Form submit event triggered!');
         e.preventDefault();
+        console.log('Form submitted!');
 
         const modal = document.getElementById('registrationModal');
         const step = modal.dataset.step;
+        console.log('Modal step:', step);
 
         if (step === 'auth') {
+            console.log('Calling handleAuth...');
             await handleAuth();
         } else if (step === 'post') {
+            console.log('Calling handlePostCreation...');
             await handlePostCreation();
+        } else {
+            console.error('Unknown step:', step);
         }
     });
 }
 
 async function handleAuth() {
+    console.log('handleAuth called');
     const modal = document.getElementById('registrationModal');
     const isSignup = !document.getElementById('signupForm').classList.contains('hidden');
+    console.log('Is signup:', isSignup);
 
     let email, password;
     if (isSignup) {
-        email = document.getElementById('signupEmail').value;
-        password = document.getElementById('signupPassword').value;
+        const emailEl = document.getElementById('signupEmail');
+        const passwordEl = document.getElementById('signupPassword');
+        console.log('Signup elements:', emailEl, passwordEl);
+        email = emailEl ? emailEl.value : '';
+        password = passwordEl ? passwordEl.value : '';
     } else {
-        email = document.getElementById('loginEmail').value;
-        password = document.getElementById('loginPassword').value;
+        const emailEl = document.getElementById('loginEmail');
+        const passwordEl = document.getElementById('loginPassword');
+        console.log('Login elements:', emailEl, passwordEl);
+        email = emailEl ? emailEl.value : '';
+        password = passwordEl ? passwordEl.value : '';
+    }
+
+    console.log('Email:', email, 'Password length:', password ? password.length : 0);
+
+    // Manual validation
+    if (!email || !password) {
+        showMessage('error', 'Please fill in all fields');
+        return;
+    }
+
+    if (!email.includes('@')) {
+        showMessage('error', 'Please enter a valid email address');
+        return;
+    }
+
+    if (password.length < 6) {
+        showMessage('error', 'Password must be at least 6 characters long');
+        return;
     }
 
     try {
@@ -542,6 +577,8 @@ async function handleAuth() {
         if (result.success) {
             if (isSignup) {
                 showMessage('success', result.message);
+                // Show verification instructions
+                showVerificationInstructions();
                 showAuthTab('login');
             } else {
                 // Login successful
@@ -563,6 +600,59 @@ async function handleAuth() {
     } catch (error) {
         showMessage('error', 'Network error. Please try again.');
     }
+}
+
+async function showVerificationInstructions() {
+    const modal = document.getElementById('registrationModal');
+    const formFields = document.getElementById('formFields');
+
+    // Get the verification link for the user
+    const email = document.getElementById('signupEmail').value;
+    let verificationLink = '';
+
+    try {
+        const response = await fetch(`/api/dev/verification-link/${encodeURIComponent(email)}`);
+        const result = await response.json();
+        if (result.success) {
+            verificationLink = result.verificationUrl;
+        }
+    } catch (error) {
+        console.log('Could not get verification link:', error);
+    }
+
+    formFields.innerHTML = `
+        <div class="verification-instructions">
+            <div class="verification-icon">
+                <i class="fas fa-envelope-open"></i>
+            </div>
+            <h3>Check Your Email!</h3>
+            <p>We've sent you a verification link. Please check your email and click the link to verify your account.</p>
+            <div class="verification-note">
+                <strong>Development Mode:</strong> Since this is a test environment, the verification email is sent to a test service.
+                ${verificationLink ? `
+                    <br><br>
+                    <strong>Verification Link:</strong><br>
+                    <a href="${verificationLink}" target="_blank" class="verification-link">${verificationLink}</a>
+                ` : ''}
+                <br><br>
+                <button type="button" class="btn btn-outline" onclick="skipVerification()">
+                    <i class="fas fa-fast-forward"></i>
+                    Skip Verification (Dev Only)
+                </button>
+            </div>
+            <div class="verification-actions">
+                <button type="button" class="btn btn-primary" onclick="showAuthTab('login')">
+                    <i class="fas fa-sign-in-alt"></i>
+                    Go to Login
+                </button>
+            </div>
+        </div>
+    `;
+}
+
+function skipVerification() {
+    showMessage('success', 'Verification skipped (development mode)');
+    showAuthTab('login');
 }
 
 async function handlePostCreation() {
@@ -670,7 +760,7 @@ function hideMessages() {
 }
 
 // Real-time search
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', function () {
     const searchInput = document.getElementById('searchInput');
     if (searchInput) {
         searchInput.addEventListener('input', debounce(applyFilters, 300));
@@ -873,115 +963,47 @@ function submitReport() {
     closeReportModal();
 }
 
-// Verification functions
-function showVerificationModal(userId) {
-    const modal = document.getElementById('verificationModal');
+// Report functions
+function showReportModal(userId) {
+    const modal = document.getElementById('reportModal');
+    const userName = document.getElementById('reportUserName');
+
+    // Find the user name from the current users array
+    const user = currentUsers.find(u => u.id === userId);
+    userName.textContent = user ? user.name : 'User';
+
     modal.dataset.userId = userId;
     modal.classList.remove('hidden');
-    // Reset state
-    document.querySelectorAll('.verification-method').forEach(m => m.classList.add('hidden'));
-    document.querySelectorAll('.verification-option').forEach(o => o.classList.remove('selected'));
 }
 
-function selectVerificationMethod(method) {
-    // Hide all methods
-    document.querySelectorAll('.verification-method').forEach(m => m.classList.add('hidden'));
-    document.querySelectorAll('.verification-option').forEach(o => o.classList.remove('selected'));
-
-    // Show selected method
-    if (method === 'social') {
-        document.getElementById('socialVerification').classList.remove('hidden');
-        document.querySelector('.verification-option').classList.add('selected');
-    } else if (method === 'domain') {
-        document.getElementById('domainVerification').classList.remove('hidden');
-        document.querySelectorAll('.verification-option')[1].classList.add('selected');
-    }
+function closeReportModal() {
+    document.getElementById('reportModal').classList.add('hidden');
 }
 
-function closeVerificationModal() {
-    const modal = document.getElementById('verificationModal');
-    modal.classList.add('hidden');
-    document.getElementById('domainInput').value = '';
-    document.getElementById('verificationInstructions').classList.add('hidden');
-    document.getElementById('domainForm').classList.remove('hidden');
-}
-
-async function startDomainVerification() {
-    const modal = document.getElementById('verificationModal');
+async function submitReport() {
+    const modal = document.getElementById('reportModal');
     const userId = parseInt(modal.dataset.userId);
-    const domain = document.getElementById('domainInput').value.trim();
+    const reason = document.getElementById('reportReason').value;
 
-    if (!domain) {
-        showMessage('error', 'Please enter a domain name');
+    if (!reason) {
+        showMessage('error', 'Please select a reason for reporting');
         return;
     }
 
     try {
-        const response = await fetch('/api/verify/domain/start', {
+        const response = await fetch('/api/report', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId, domain })
+            body: JSON.stringify({ userId, reason })
         });
 
         const result = await response.json();
 
         if (result.success) {
-            // Show instructions
-            document.getElementById('domainForm').classList.add('hidden');
-            const instructions = document.getElementById('verificationInstructions');
-            instructions.innerHTML = `
-                <div class="verification-steps">
-                    <h4><i class="fas fa-list-ol"></i> Verification Steps</h4>
-                    <ol>
-                        <li>Go to your DNS provider (where you manage ${domain})</li>
-                        <li>Add a new TXT record with these details:</li>
-                    </ol>
-                    <div class="dns-record">
-                        <strong>Type:</strong> TXT<br>
-                        <strong>Name:</strong> @ (or leave blank)<br>
-                        <strong>Value:</strong> <code>${result.verificationCode}</code>
-                    </div>
-                    <p><i class="fas fa-info-circle"></i> DNS changes may take up to 10 minutes to propagate.</p>
-                    <button class="btn btn-primary" onclick="checkDomainVerification()">
-                        <i class="fas fa-check"></i> Check Verification
-                    </button>
-                    <button class="btn btn-outline" onclick="closeVerificationModal()">Cancel</button>
-                </div>
-            `;
-            instructions.classList.remove('hidden');
+            showMessage('success', 'Report submitted successfully. Thank you for helping keep our community safe.');
+            closeReportModal();
         } else {
-            showMessage('error', result.error || 'Failed to start verification');
-        }
-    } catch (error) {
-        showMessage('error', 'Network error. Please try again.');
-    }
-}
-
-async function checkDomainVerification() {
-    const modal = document.getElementById('verificationModal');
-    const userId = parseInt(modal.dataset.userId);
-
-    try {
-        const response = await fetch('/api/verify/domain/check', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ userId })
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            showMessage('success', 'Domain verified successfully! Your profile is now verified.');
-            closeVerificationModal();
-            // Reload users to show updated verification status
-            await loadUsers();
-            const activeSection = document.querySelector('.section:not(.hidden)');
-            if (activeSection && (activeSection.id === 'creators' || activeSection.id === 'sponsors')) {
-                const sectionType = activeSection.id === 'creators' ? 'creator' : 'sponsor';
-                displayUsers(sectionType);
-            }
-        } else {
-            showMessage('error', result.message || 'Verification failed');
+            showMessage('error', result.error || 'Failed to submit report');
         }
     } catch (error) {
         showMessage('error', 'Network error. Please try again.');

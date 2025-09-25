@@ -1,32 +1,31 @@
 const Stripe = require('stripe');
-const crypto = require('crypto');
+const pool = require('./db');
 require('dotenv').config();
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 
-// In-memory payment tracking (in production, use database)
-let paymentSessions = new Map();
-let paidUsers = new Set(); // Users who paid for posting
-let contactReveals = new Map(); // email -> userId tracking who paid to see contact
-let stripeCustomers = new Map(); // email -> stripe_customer_id mapping
-
 // Create or get Stripe customer for user
 async function getOrCreateStripeCustomer(userEmail) {
-    // Check if we already have a customer ID cached
-    if (stripeCustomers.has(userEmail)) {
-        return stripeCustomers.get(userEmail);
-    }
-
     try {
+        // Check if we already have a customer ID in database
+        const existingCustomer = await pool.query(
+            'SELECT stripe_customer_id FROM users WHERE email = $1 AND stripe_customer_id IS NOT NULL',
+            [userEmail]
+        );
+
+        if (existingCustomer.rows.length > 0) {
+            return existingCustomer.rows[0].stripe_customer_id;
+        }
+
         // Check if customer exists in Stripe
-        const existingCustomers = await stripe.customers.list({
+        const existingStripeCustomers = await stripe.customers.list({
             email: userEmail,
             limit: 1
         });
 
         let customer;
-        if (existingCustomers.data.length > 0) {
-            customer = existingCustomers.data[0];
+        if (existingStripeCustomers.data.length > 0) {
+            customer = existingStripeCustomers.data[0];
         } else {
             // Create new customer
             customer = await stripe.customers.create({
@@ -37,8 +36,12 @@ async function getOrCreateStripeCustomer(userEmail) {
             });
         }
 
-        // Cache the customer ID
-        stripeCustomers.set(userEmail, customer.id);
+        // Save customer ID to database
+        await pool.query(
+            'UPDATE users SET stripe_customer_id = $1 WHERE email = $2',
+            [customer.id, userEmail]
+        );
+
         return customer.id;
     } catch (error) {
         console.error('Error creating/fetching Stripe customer:', error);
@@ -74,11 +77,11 @@ async function createPostingCheckoutSession(req, res) {
                     quantity: 1,
                 },
             ],
-            customer: customerId, // Use customer ID for saved payment methods
-            customer_email: userEmail, // Required for billing_details.email
+            customer: customerId,
+            customer_email: userEmail,
             payment_method_options: {
                 card: {
-                    setup_future_usage: 'on_session', // Save payment method for future use
+                    setup_future_usage: 'on_session',
                 },
             },
             metadata: {
@@ -89,13 +92,18 @@ async function createPostingCheckoutSession(req, res) {
             cancel_url: `${process.env.BASE_URL}/payment-cancelled?type=posting`,
         });
 
-        // Store session info
-        paymentSessions.set(session.id, {
-            type: 'posting_fee',
-            userEmail: userEmail,
-            amount: parseInt(process.env.POST_FEE) || 500,
-            createdAt: new Date()
-        });
+        // Store session info in database
+        await pool.query(`
+            INSERT INTO payment_sessions (id, user_email, payment_type, amount, metadata, stripe_session_data)
+            VALUES ($1, $2, $3, $4, $5, $6)
+        `, [
+            session.id,
+            userEmail,
+            'posting_fee',
+            parseInt(process.env.POST_FEE) || 500,
+            JSON.stringify({ payment_type: 'posting_fee' }),
+            JSON.stringify(session)
+        ]);
 
         res.json({
             success: true,
@@ -136,8 +144,8 @@ async function createContactRevealCheckoutSession(req, res) {
                     quantity: 1,
                 },
             ],
-            customer: customerId, // Use customer ID for saved payment methods
-            customer_email: userEmail, // Required for billing_details.email
+            customer: customerId,
+            customer_email: userEmail,
             metadata: {
                 payment_type: 'contact_reveal',
                 user_email: userEmail,
@@ -147,14 +155,18 @@ async function createContactRevealCheckoutSession(req, res) {
             cancel_url: `${process.env.BASE_URL}/payment-cancelled?type=contact`,
         });
 
-        // Store session info
-        paymentSessions.set(session.id, {
-            type: 'contact_reveal',
-            userEmail: userEmail,
-            targetPostId: targetPostId,
-            amount: parseInt(process.env.CONTACT_REVEAL_FEE) || 100,
-            createdAt: new Date()
-        });
+        // Store session info in database
+        await pool.query(`
+            INSERT INTO payment_sessions (id, user_email, payment_type, amount, metadata, stripe_session_data)
+            VALUES ($1, $2, $3, $4, $5, $6)
+        `, [
+            session.id,
+            userEmail,
+            'contact_reveal',
+            parseInt(process.env.CONTACT_REVEAL_FEE) || 100,
+            JSON.stringify({ payment_type: 'contact_reveal', target_post_id: targetPostId }),
+            JSON.stringify(session)
+        ]);
 
         res.json({
             success: true,
@@ -167,8 +179,6 @@ async function createContactRevealCheckoutSession(req, res) {
         res.status(500).json({ error: 'Payment session creation failed' });
     }
 }
-
-// Remove bulk contact reveal function - no longer needed with Stripe saved payment methods
 
 // Handle successful payments
 async function handlePaymentSuccess(req, res) {
@@ -186,18 +196,37 @@ async function handlePaymentSuccess(req, res) {
             return res.status(400).json({ error: 'Payment not completed' });
         }
 
-        const sessionData = paymentSessions.get(session_id);
-        if (!sessionData) {
+        // Get session data from database
+        const sessionResult = await pool.query(
+            'SELECT * FROM payment_sessions WHERE id = $1',
+            [session_id]
+        );
+
+        if (sessionResult.rows.length === 0) {
             return res.status(400).json({ error: 'Invalid session' });
         }
 
-        // Process payment based on type
-        if (sessionData.type === 'posting_fee') {
-            // Mark user as paid for posting
-            paidUsers.add(sessionData.userEmail);
+        const sessionData = sessionResult.rows[0];
 
-            // Clean up session data
-            paymentSessions.delete(session_id);
+        // Process payment based on type
+        if (sessionData.payment_type === 'posting_fee') {
+            // Record payment in user_payments table
+            await pool.query(`
+                INSERT INTO user_payments (user_email, payment_type, amount, stripe_session_id)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT DO NOTHING
+            `, [
+                sessionData.user_email,
+                'posting_fee',
+                sessionData.amount,
+                session_id
+            ]);
+
+            // Update session status
+            await pool.query(
+                'UPDATE payment_sessions SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2',
+                ['completed', session_id]
+            );
 
             return res.json({
                 success: true,
@@ -205,23 +234,33 @@ async function handlePaymentSuccess(req, res) {
                 payment_type: 'posting_fee'
             });
 
-        } else if (sessionData.type === 'contact_reveal') {
-            // Mark contact as revealed for this user
-            const revealKey = `${sessionData.userEmail}-${sessionData.targetPostId}`;
-            contactReveals.set(revealKey, {
-                paidAt: new Date(),
-                amount: sessionData.amount,
-                stripeSessionId: session_id
-            });
+        } else if (sessionData.payment_type === 'contact_reveal') {
+            const metadata = JSON.parse(sessionData.metadata);
+            const targetPostId = metadata.target_post_id;
 
-            // Clean up session data
-            paymentSessions.delete(session_id);
+            // Record contact reveal
+            await pool.query(`
+                INSERT INTO contact_reveals (requester_email, target_post_id, stripe_payment_intent_id, amount_paid)
+                VALUES ($1, $2, $3, $4)
+                ON CONFLICT (requester_email, target_post_id) DO NOTHING
+            `, [
+                sessionData.user_email,
+                parseInt(targetPostId),
+                session.payment_intent,
+                sessionData.amount
+            ]);
+
+            // Update session status
+            await pool.query(
+                'UPDATE payment_sessions SET status = $1, completed_at = CURRENT_TIMESTAMP WHERE id = $2',
+                ['completed', session_id]
+            );
 
             return res.json({
                 success: true,
                 message: 'Contact information unlocked! You can now view the contact details.',
                 payment_type: 'contact_reveal',
-                target_post_id: sessionData.targetPostId
+                target_post_id: targetPostId
             });
         } else {
             return res.status(400).json({ error: 'Unknown payment type' });
@@ -234,27 +273,62 @@ async function handlePaymentSuccess(req, res) {
 }
 
 // Check if user has paid for posting
-function hasUserPaidForPosting(userEmail) {
-    return paidUsers.has(userEmail);
+async function hasUserPaidForPosting(userEmail) {
+    try {
+        const result = await pool.query(
+            'SELECT 1 FROM user_payments WHERE user_email = $1 AND payment_type = $2',
+            [userEmail, 'posting_fee']
+        );
+        return result.rows.length > 0;
+    } catch (error) {
+        console.error('Error checking posting payment:', error);
+        return false;
+    }
 }
 
 // Check if user has paid to reveal specific contact
-function hasUserPaidForContact(userEmail, targetUserId) {
-    const revealKey = `${userEmail}-${targetUserId}`;
-    return contactReveals.has(revealKey);
+async function hasUserPaidForContact(userEmail, targetUserId) {
+    try {
+        const result = await pool.query(
+            'SELECT 1 FROM contact_reveals WHERE requester_email = $1 AND target_post_id = $2',
+            [userEmail, parseInt(targetUserId)]
+        );
+        return result.rows.length > 0;
+    } catch (error) {
+        console.error('Error checking contact reveal payment:', error);
+        return false;
+    }
 }
 
 // Get payment status for user
-function getUserPaymentStatus(userEmail) {
-    return {
-        hasPaidForPosting: hasUserPaidForPosting(userEmail),
-        revealedContacts: Array.from(contactReveals.keys())
-            .filter(key => key.startsWith(`${userEmail}-`))
-            .map(key => key.split('-')[1])
-    };
+async function getUserPaymentStatus(userEmail) {
+    try {
+        // Check posting fee payment
+        const postingResult = await pool.query(
+            'SELECT 1 FROM user_payments WHERE user_email = $1 AND payment_type = $2',
+            [userEmail, 'posting_fee']
+        );
+
+        // Get revealed contacts
+        const contactsResult = await pool.query(
+            'SELECT target_post_id FROM contact_reveals WHERE requester_email = $1',
+            [userEmail]
+        );
+
+        return {
+            hasPaidForPosting: postingResult.rows.length > 0,
+            revealedContacts: contactsResult.rows.map(row => row.target_post_id.toString())
+        };
+    } catch (error) {
+        console.error('Error getting payment status:', error);
+        return {
+            hasPaidForPosting: false,
+            revealedContacts: []
+        };
+    }
 }
 
-// Webhook handler for Stripe events (optional but recommended for production)
+// Webhook handler for Stripe events
 async function handleStripeWebhook(req, res) {
     const sig = req.headers['stripe-signature'];
     let event;
@@ -271,9 +345,11 @@ async function handleStripeWebhook(req, res) {
         case 'checkout.session.completed':
             const session = event.data.object;
             console.log('Payment succeeded:', session.id);
+            // Additional webhook processing can be added here
             break;
         case 'payment_intent.payment_failed':
             console.log('Payment failed:', event.data.object);
+            // Mark session as failed in database
             break;
         default:
             console.log(`Unhandled event type ${event.type}`);
@@ -290,5 +366,5 @@ module.exports = {
     hasUserPaidForContact,
     getUserPaymentStatus,
     handleStripeWebhook,
-    getOrCreateStripeCustomer // Export for use in user registration
+    getOrCreateStripeCustomer
 };

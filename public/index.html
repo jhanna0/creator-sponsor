@@ -273,66 +273,6 @@
             </div>
         </div>
 
-        <!-- Domain Verification Modal -->
-        <div id="verificationModal" class="modal hidden">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h2>Verify Domain Ownership</h2>
-                    <button class="close-btn" onclick="closeVerificationModal()">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-                <div class="modal-form">
-                    <div id="domainForm">
-                        <div class="verification-info">
-                            <i class="fas fa-shield-alt"></i>
-                            <h4>Get Verified</h4>
-                            <p>Choose how to verify your identity and build trust with sponsors.</p>
-                        </div>
-
-                        <div class="verification-options">
-                            <div class="verification-option" onclick="selectVerificationMethod('social')">
-                                <i class="fas fa-users"></i>
-                                <h5>Social Media Verification</h5>
-                                <p>Post a verification code on your main social platform</p>
-                                <span class="verification-badge">Recommended</span>
-                            </div>
-
-                            <div class="verification-option" onclick="selectVerificationMethod('domain')">
-                                <i class="fas fa-globe"></i>
-                                <h5>Domain Verification</h5>
-                                <p>Verify ownership of your website/domain</p>
-                                <small>Only if you have your own website</small>
-                            </div>
-                        </div>
-
-                        <div id="socialVerification" class="verification-method hidden">
-                            <div class="form-group">
-                                <label for="socialUrl">Your Profile URL</label>
-                                <input type="url" id="socialUrl" placeholder="https://youtube.com/@yourname" required>
-                                <small>Enter your main social media profile URL</small>
-                            </div>
-                        </div>
-
-                        <div id="domainVerification" class="verification-method hidden">
-                            <div class="form-group">
-                                <label for="domainInput">Your Domain (without http://)</label>
-                                <input type="text" id="domainInput" placeholder="example.com" required>
-                                <small>Enter the domain you want to verify</small>
-                            </div>
-                        </div>
-                        <div class="modal-actions">
-                            <button type="button" class="btn btn-primary" onclick="startDomainVerification()">
-                                <i class="fas fa-play"></i> Start Verification
-                            </button>
-                            <button type="button" class="btn btn-outline" onclick="closeVerificationModal()">Cancel</button>
-                        </div>
-                    </div>
-                    <div id="verificationInstructions" class="verification-instructions hidden"></div>
-                </div>
-            </div>
-        </div>
-
         <!-- Report Modal -->
         <div id="reportModal" class="modal hidden">
             <div class="modal-content">
