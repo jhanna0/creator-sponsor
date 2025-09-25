@@ -362,6 +362,9 @@ body {
     transition: all 0.3s ease;
     position: relative;
     overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    cursor: pointer;
 }
 
 .card:hover {
@@ -392,6 +395,9 @@ body {
     font-weight: 700;
     color: var(--primary);
     margin-bottom: 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .card-platform {
@@ -431,14 +437,23 @@ body {
 .card-description {
     color: var(--gray-600);
     line-height: 1.6;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
+    height: 4.8rem;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 4;
+    -webkit-box-orient: vertical;
+    flex-shrink: 0;
 }
 
 .card-tags {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     gap: 0.5rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
+    overflow: hidden;
+    height: 2rem;
+    flex-shrink: 0;
 }
 
 .tag {
@@ -450,10 +465,19 @@ body {
     font-weight: 500;
 }
 
+.card-date {
+    color: var(--gray-500);
+    font-size: 0.8rem;
+    margin-bottom: 1rem;
+    flex-shrink: 0;
+}
+
 .card-contact {
     display: flex;
     gap: 0.5rem;
     align-items: center;
+    margin-top: auto;
+    flex-shrink: 0;
 }
 
 .contact-btn {
@@ -1036,6 +1060,97 @@ body {
 
 .verification-method {
     margin-top: 1rem;
+}
+
+/* User Details Modal Styles */
+.details-modal {
+    max-width: 600px;
+}
+
+.details-header {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.detail-badge {
+    background: var(--accent);
+    color: var(--secondary);
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    text-transform: uppercase;
+}
+
+.detail-badge.sponsor {
+    background: var(--accent-blue);
+}
+
+.details-content {
+    padding: 2rem;
+}
+
+.details-info {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 2rem;
+    padding: 1.5rem;
+    background: var(--gray-50);
+    border-radius: 12px;
+}
+
+.detail-row {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.detail-label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.detail-value {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--primary);
+}
+
+.details-description {
+    margin-bottom: 2rem;
+}
+
+.details-description h4,
+.details-interests h4 {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--primary);
+    margin-bottom: 1rem;
+}
+
+.details-description p {
+    color: var(--gray-600);
+    line-height: 1.6;
+}
+
+.details-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 2rem;
+}
+
+.details-actions {
+    display: flex;
+    gap: 1rem;
+    justify-content: center;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--gray-200);
 }
 
 .hidden {

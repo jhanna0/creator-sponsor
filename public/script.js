@@ -161,8 +161,12 @@ function createUserCard(user) {
     const platformIcon = platformIcons[user.platform.toLowerCase()] || 'fas fa-globe';
     const typeClass = user.userType === 'sponsor' ? 'sponsor' : 'creator';
 
+    // Format the creation date
+    const createdDate = new Date(user.createdAt);
+    const timeAgo = formatTimeAgo(createdDate);
+
     return `
-        <div class="card">
+        <div class="card" onclick="showUserDetails(${user.id})">
             <div class="type-badge ${typeClass}">${user.userType}</div>
 
             <div class="card-header">
@@ -191,20 +195,24 @@ function createUserCard(user) {
             <div class="card-description">${user.description}</div>
 
             <div class="card-tags">
-                ${user.interests.map(interest => `<span class="tag">${interest}</span>`).join('')}
+                ${user.interests.slice(0, 4).map(interest => `<span class="tag">${interest}</span>`).join('')}
+            </div>
+
+            <div class="card-date">
+                <i class="fas fa-clock"></i> Posted ${timeAgo}
             </div>
 
             <div class="card-contact">
-                <button class="contact-btn" onclick="showContactModal(${user.id})">
+                <button class="contact-btn" onclick="event.stopPropagation(); showContactModal(${user.id})">
                     <i class="fas fa-envelope"></i>
                     Contact ${user.userType === 'creator' ? 'Creator' : 'Sponsor'}
                 </button>
                 ${!user.verified && user.userType === 'creator' ? `
-                    <button class="verify-btn" onclick="showVerificationModal(${user.id})" title="Verify your domain">
+                    <button class="verify-btn" onclick="event.stopPropagation(); showVerificationModal(${user.id})" title="Verify your domain">
                         <i class="fas fa-shield-alt"></i>
                     </button>
                 ` : ''}
-                <button class="report-btn" onclick="showReportModal(${user.id})" title="Report this profile">
+                <button class="report-btn" onclick="event.stopPropagation(); showReportModal(${user.id})" title="Report this profile">
                     <i class="fas fa-flag"></i>
                 </button>
             </div>
@@ -220,6 +228,62 @@ function formatNumber(num) {
         return (num / 1000).toFixed(0) + 'K';
     }
     return num.toString();
+}
+
+// Format time ago
+function formatTimeAgo(date) {
+    const now = new Date();
+    const diffTime = Math.abs(now - date);
+    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const diffHours = Math.floor(diffTime / (1000 * 60 * 60));
+    const diffMinutes = Math.floor(diffTime / (1000 * 60));
+
+    if (diffDays > 30) {
+        return date.toLocaleDateString();
+    } else if (diffDays > 0) {
+        return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+    } else if (diffHours > 0) {
+        return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    } else if (diffMinutes > 0) {
+        return `${diffMinutes} minute${diffMinutes > 1 ? 's' : ''} ago`;
+    } else {
+        return 'Just now';
+    }
+}
+
+// Show user details modal
+function showUserDetails(userId) {
+    const user = currentUsers.find(u => u.id === userId);
+    if (!user) return;
+
+    const modal = document.getElementById('userDetailsModal');
+
+    // Populate modal with user details
+    document.getElementById('detailsUserName').textContent = user.name;
+    document.getElementById('detailsUserType').textContent = user.userType;
+    document.getElementById('detailsUserType').className = `detail-badge ${user.userType}`;
+    document.getElementById('detailsPlatform').innerHTML = `
+        <i class="${platformIcons[user.platform.toLowerCase()] || 'fas fa-globe'}"></i>
+        ${user.platform}
+        ${user.verified ? '<i class="fas fa-check-circle" style="color: var(--accent-blue); margin-left: 0.5rem;"></i>' : ''}
+    `;
+    document.getElementById('detailsFollowers').textContent = formatNumber(user.followers);
+    document.getElementById('detailsPricePoint').textContent = `$${user.pricePoint}`;
+    document.getElementById('detailsDescription').textContent = user.description;
+    document.getElementById('detailsInterests').innerHTML = user.interests.map(interest =>
+        `<span class="tag">${interest}</span>`
+    ).join('');
+    document.getElementById('detailsCreatedAt').textContent = formatTimeAgo(new Date(user.createdAt));
+
+    // Store user ID for modal actions
+    modal.dataset.userId = userId;
+
+    modal.classList.remove('hidden');
+}
+
+function closeUserDetailsModal() {
+    const modal = document.getElementById('userDetailsModal');
+    modal.classList.add('hidden');
 }
 
 // Apply filters with API call
